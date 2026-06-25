@@ -40,6 +40,8 @@ OUTPUT_FILE = os.path.join(PROJECT_DIR, "translation_output.txt")
 SKIP_FILE = os.path.join(PROJECT_DIR, "skipped_sections.txt")
 LOWRATIO_FILE = os.path.join(PROJECT_DIR, "low_ratio_sections.txt")
 VALIDATION_FAILED_FILE = os.path.join(PROJECT_DIR, "validation_failed_sections.txt")
+RERUN_SECTIONS_FILE = os.path.join(PROJECT_DIR, "rerun_sections.txt")
+PROPER_NAME_ISSUES_FILE = os.path.join(PROJECT_DIR, "proper_name_issues.txt")
 PROBLEMS_FILE = os.path.join(PROJECT_DIR, "map_problems.txt")
 VOICE_LOG_FILE = os.path.join(PROJECT_DIR, "voice_log.txt")
 
@@ -386,8 +388,19 @@ def call_cursor_agent(prompt: str) -> tuple[str, str | None]:
 # Map building
 # ---------------------------------------------------------------------------
 
-MAP_PROMPT = """List every natural section/chapter you see in the source text below.
-For each, give: the heading, and the FIRST 8 words copied EXACTLY and VERBATIM from the source —
+MAP_PROMPT = """List every natural section/chapter of the SOURCE DOCUMENT in the text below.
+
+INCLUDE ONLY real chapter/section boundaries of the chronicle itself.
+SKIP entirely — do not list as sections:
+- Editor's introduction, prologue, preface, front matter
+- Footnotes, scholarly apparatus, variant tables, indices
+- Page markers (e.g. "--- Page 123 ---"), "Digitized by Google", folio signatures
+- Publisher catalogs, subscription ads, "FIN DEL TOMO", back matter after the narrative ends
+- Mid-sentence cross-references like "capitulo q dello habla" (lowercase — not a chapter header)
+
+Real chapter headers in this edition look like: CAPITULO XXIII., [CAPITULO I]., PREÁMBULO (OTANDO estado…).
+
+For each real section, give: the heading, and the FIRST 8 words copied EXACTLY and VERBATIM from the source —
 character for character, do not correct, normalize, paraphrase, or fix OCR.
 
 Output one section per line as:
@@ -1175,6 +1188,11 @@ def append_validation_failure(section_n: int, problems: list[str]) -> None:
     append_text(VALIDATION_FAILED_FILE, "\n".join(lines))
 
 
+def append_rerun_section(section_n: int) -> None:
+    """Log section number for batch re-run: --sections $(paste rerun_sections.txt)."""
+    append_text(RERUN_SECTIONS_FILE, f"{section_n}\n")
+
+
 def finalize_translation_output(
     english: str,
     spanish: str,
@@ -1266,6 +1284,7 @@ def translate_one_section(
                 )
                 continue
             append_skip(SKIP_FILE, n, chunk, failed_err)
+            append_rerun_section(n)
             return False, f"SKIPPED ({failed_err})", None
 
         english = "\n\n".join(p for p in english_parts if p.strip())
@@ -1288,6 +1307,9 @@ def translate_one_section(
 
             append_skip(SKIP_FILE, n, chunk, "validation_failed")
             append_validation_failure(n, problems)
+            append_rerun_section(n)
+            if any("ratio" in p or "too short vs source" in p for p in problems):
+                append_text(LOWRATIO_FILE, f"{n}\n")
             return False, "VALIDATION FAILED", None
 
         voice_line = extract_voice_line(flags)
@@ -1379,6 +1401,7 @@ def translate_sections(
     # Fresh sidecar logs for this run
     write_text(LOWRATIO_FILE, "")
     write_text(VALIDATION_FAILED_FILE, "")
+    write_text(RERUN_SECTIONS_FILE, "")
 
     print(f"Map: {total} sections | already done: {len(done)} | to process: {len(pending)}")
 
@@ -1401,14 +1424,21 @@ def translate_sections(
         end = sec["end_offset"]
         chunk = source[start:end]
 
-        ok, status, info = translate_one_section(
-            n=n,
-            heading=heading,
-            chunk=chunk,
-            utp=utp,
-            completed_sections=completed_sections,
-            total=total,
-        )
+        try:
+            ok, status, info = translate_one_section(
+                n=n,
+                heading=heading,
+                chunk=chunk,
+                utp=utp,
+                completed_sections=completed_sections,
+                total=total,
+            )
+        except Exception as exc:
+            safe_print(f"Section {n}/{total} — UNHANDLED ERROR: {exc}")
+            append_skip(SKIP_FILE, n, chunk, f"exception:{exc}")
+            append_rerun_section(n)
+            skipped_nums.append(n)
+            continue
 
         if not ok:
             skipped_nums.append(n)
@@ -1428,6 +1458,8 @@ def translate_sections(
         f"Validation failed: {len(validation_failed_nums)}"
         + (f"  (see {VALIDATION_FAILED_FILE})" if validation_failed_nums else "")
     )
+    if skipped_nums or validation_failed_nums:
+        print(f"Re-run list: {RERUN_SECTIONS_FILE}")
     print(f"Output: {OUTPUT_FILE}")
     print_voice_summary(OUTPUT_FILE)
     return 1 if validation_failed_nums or skipped_nums else 0
@@ -1488,6 +1520,11 @@ def main() -> int:
         action="store_true",
         help="Renumber output from old 142-section map to corrected 140-section map.",
     )
+    parser.add_argument(
+        "--check-proper-names",
+        action="store_true",
+        help="Mechanical proper-name cross-check (separate from model flags).",
+    )
     args = parser.parse_args()
 
     section_filter: set[int] | None = None
@@ -1503,6 +1540,12 @@ def main() -> int:
     if args.migrate_output:
         backup = os.path.join(PROJECT_DIR, "translation_output_v142_backup.txt")
         return migrate_output_142_to_140(OUTPUT_FILE, backup)
+    if args.check_proper_names:
+        from proper_name_check import run_proper_name_check
+
+        return run_proper_name_check(
+            SOURCE_FILE, MAP_FILE, OUTPUT_FILE, PROPER_NAME_ISSUES_FILE, section_filter
+        )
     return translate_sections(
         SOURCE_FILE, MAP_FILE, args.limit, section_filter, args.force
     )

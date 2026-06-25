@@ -88,4 +88,15 @@ Do not produce a cleaned original, a column of the source text, or editorial not
 
 <english> Your complete modern English translation of this section. </english>
 <spanish> Your complete modern Spanish translation of this section. </spanish>
-<flags> Always begin with the detected voice, e.g. "voice: Bernal Díaz — blunt aggrieved old soldier". Then, if anything applies: any genuinely uncertain spot; any place the original and a reference conflicted; any divergence you made from a reference; any correction or normalization (OCR fix, spelling modernization — itemize each actual change with →, never pad with no-ops like hato→hato); any song/lament/damaged passage that is more interpretive than the rest; and any place you switched voice from the previous section, with why. NEVER list proper-name changes in flags unless you are certain — if the source has xpoual de oli, the name is Cristóbal de Olid, not Gonzalo. Do not write "modernized throughout, e.g. …" without listing real deltas; the runner will reject false or identity mappings. If the passage had no reference behind it, put ⚠ NO REFERENCE — immediately after the voice note. Keep it to a few lines. </flags>
+<flags> Always begin with the detected voice, e.g. "voice: Bernal Díaz — blunt aggrieved old soldier". Then, if anything applies:
+
+VOICE / REFERENCE: uncertain spots; reference conflicts; voice switches (with why). If no reference: ⚠ NO REFERENCE — right after the voice line.
+
+PROPER NAMES — one line each, never bundled in spelling blobs:
+  PROPER NAME: xpoual de oli → Cristóbal de Olid
+  PROPER NAME: fran° → Francisco de Montejo
+Every name expansion or OCR name fix gets its own PROPER NAME: line. Never fold names into "modernized throughout, e.g. …". If uncertain, write UNCERTAIN NAME: [token] — do not guess.
+
+SPELLING / OCR — high-volume orthography: write "Colonial spellings modernized throughout (representative sample:" then list only REAL changes with →. Never list no-ops (catamos→catamos, hato→hato). If you only changed a few things, list only those — do not imply a longer list.
+
+Other: song/lament/damaged passages; apparatus omitted. Keep flags honest: labeled samples are samples; real deltas are real deltas. </flags>

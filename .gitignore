@@ -8,7 +8,11 @@ venv/
 skipped_sections.txt
 validation_failed_sections.txt
 low_ratio_sections.txt
+rerun_sections.txt
+proper_name_issues.txt
 map_problems.txt
+audit_report.txt
+translation_output_clean.txt
 
 # Large backup from section-number migration
 translation_output_v142_backup.txt
